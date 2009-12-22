@@ -1,0 +1,8 @@
+syntax:glob
+.afm1
+.afm2
+.twisted
+Artwork/**
+scripts/**
+tests/**
+.config/logs/**
