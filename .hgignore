@@ -3,6 +3,7 @@ syntax:glob
 .afm2
 .twisted
 Artwork/**
+Artwork/*/**
 scripts/**
 tests/**
 .config/logs/**
