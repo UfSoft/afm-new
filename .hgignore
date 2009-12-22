@@ -1,9 +1,6 @@
 syntax:glob
-.afm1
-.afm2
-.twisted
-Artwork/**
-Artwork/*/**
+Artwork/*
+Artwork/**/*
 scripts/**
 tests/**
 .config/logs/**
