@@ -18,7 +18,7 @@ from twisted.python.log import PythonLoggingObserver
 from afm import application, config
 from afm.database import db, Certificate
 from afm.logger import Logging
-from afm.usage import RawUsageOptions, certs, SysExit
+from afm.usage import RawUsageOptions, certs, client, server, SysExit
 
 class ServiceOptions(RawUsageOptions):
     optParameters = [
@@ -32,7 +32,11 @@ class ServiceOptions(RawUsageOptions):
 
     subCommands = [
         ["certs", None, certs.CertsCreatorOptions,
-         certs.CertsCreatorOptions.__doc__]
+         certs.CertsCreatorOptions.__doc__],
+        ["server", None, server.ServerOptions,
+         server.ServerOptions.__doc__],
+        ["client", None, client.ClientOptions,
+         client.ClientOptions.__doc__]
     ]
 
     def opt_config(self, config_dir):
@@ -82,6 +86,32 @@ class ServiceOptions(RawUsageOptions):
         except Exception, err:
             print err
             raise
+
+        # Server settings
+        config.server.root_ca = abspath(
+            expanduser(parser.get('server', 'root-ca'))
+        )
+
+        config.server.certificate = abspath(
+            expanduser(parser.get('server', 'certificate'))
+        )
+
+        config.server.private_key = abspath(
+            expanduser(parser.get('server', 'private-key'))
+        )
+
+        # Client settings
+        config.client.root_ca = abspath(
+            expanduser(parser.get('client', 'root-ca'))
+        )
+
+        config.client.certificate = abspath(
+            expanduser(parser.get('client', 'certificate'))
+        )
+
+        config.client.private_key = abspath(
+            expanduser(parser.get('client', 'private-key'))
+        )
 
 #        if self.subOptions and not self.subOptions.subCommand == 'newca':
 #            if not db.session().query(Certificate).filter_by(root_ca=True).count():
@@ -140,9 +170,22 @@ class ServiceOptions(RawUsageOptions):
 
             sqla_log = logging.getLogger('sqlalchemy')
             sqla_log.setLevel(logging.ERROR)
+
             if self.opts['debug']:
                 sqla_log.setLevel(self.opts['logging_level'])
+
+                # SQLA Engine Logging
+                sqlae = logging.getLogger('sqlalchemy.engine')
+                sqlae.setLevel(self.opts['logging_level'])
+                sqlae.addHandler(handler)
+
+                # SQLA Unit-Of-Work Logging
+                sqlauof = logging.getLogger('sqlalchemy.orm.unitofwork')
+                sqlauof.setLevel(self.opts['logging_level'])
+                sqlauof.addHandler(handler)
+
             sqla_log.addHandler(handler)
+
 
             tw_log = logging.getLogger('twisted')
             tw_log.setLevel(self.opts['logging_level'])

@@ -26,4 +26,6 @@ from types import ModuleType
 sys.modules['afm.application'] = application = ModuleType('application')
 sys.modules['afm.config'] = config = ModuleType('config')
 sys.modules['afm.config.db'] = config.db = ModuleType('db')
+sys.modules['afm.config.client'] = config.client = ModuleType('client')
+sys.modules['afm.config.server'] = config.server = ModuleType('server')
 sys.modules['afm.eventmanager'] = eventmanager = ModuleType('eventmanager')

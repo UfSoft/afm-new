@@ -18,7 +18,7 @@ from twisted.python import usage, util, reflect
 from OpenSSL import crypto
 
 from afm import config
-from afm.database import db, Certificate
+from afm.database import db, Certificate, RevokedCertificate
 from afm.usage import RawUsageOptions, SysExit
 
 def ask_password(calledback=None):
@@ -221,7 +221,7 @@ class NewCert(BaseCertOptions):
             )
         except crypto.Error, error:
             raise SysExit("Private key needs password and wrong password "
-                          "entered:", error[0][0][2])
+                          "entered: %s", error[0][0][2])
 
         print "Generating new private key"
         serial = self.get_next_serial()
@@ -234,8 +234,7 @@ class NewCert(BaseCertOptions):
                                   issuer=root_ca)
         session.add(certificate)
         session.commit()
-        print "Done"
-        sys.exit(0)
+        raise SysExit("Done", code=0)
 
 
 #class SignCert(BaseOptions):
@@ -309,11 +308,13 @@ class ListCerts(BaseOptions):
         maxCN = max([len(c.subject.CN) for c in certificates] +
                     [len("Common Name")])
         maxIS = max([c.issuer and len(c.issuer.subject.CN) or 0
-                     for c in certificates] + [len("Issuer (Root CA ID)")])
-        format = ' %%s %%-%ds | %%-%ds | %%-%ds | %%-%ds' % (
-            maxid, maxserial, maxCN, maxIS)
+                     for c in certificates] + [len("Issuer (ID/Serial)")])
+        maxRev = len("Revoked")
+        maxRevReason = max([len("Reason"), (c.revoked and len(c.revoked.reason or "") or 0)])
+        format = ' %%s %%-%ds | %%-%ds | %%-%ds | %%-%ds | %%-%ds | %%-%ds' % (
+            maxid, maxserial, maxCN, maxIS, maxRev, maxRevReason)
         header = format % ('', 'ID', 'Serial', 'Common Name',
-                           "Issuer (Root CA ID/Serial)")
+                           "Issuer (ID/Serial)", "Revoked", "Reason")
         print
         print header
         print '-'*len(header)
@@ -322,7 +323,9 @@ class ListCerts(BaseOptions):
                             cert.cert_id, cert.serial, cert.subject.CN,
                             cert.issuer and cert.issuer.subject.CN + (" (%s/%s)" %
                                 (cert.issuer.cert_id, cert.issuer.serial)
-                            or ''))
+                            or ''),
+                            cert.revoked and "Yes" or "No",
+                            cert.revoked and cert.revoked.reason or " ")
         print '\n * - Root Certificate\n'
         sys.exit(0)
 
@@ -351,6 +354,64 @@ class DeleteCerts(BaseOptions):
         session.commit()
         raise SysExit("Done", code=0)
 
+class RevokeCerts(BaseOptions):
+    longdesc = """Revoke certificates in store"""
+
+    optParameters = [
+        ["id", "i", None, "certificate id", int],
+        ["reason", "r", None, "Why was the certificate revoked"]
+    ]
+
+    def opt_id(self, cert_id):
+        self.opts['id'] = int(cert_id)
+
+    def executeCommand(self):
+        if not self.opts['id']:
+            raise SysExit("You must specify which certificate you wish to "
+                          "revoke")
+
+        session = db.session()
+        cert = session.query(Certificate).get(self.opts['id'])
+        if not cert:
+            raise SysExit("Certificate with the ID %d not found",
+                          self.opts['id'])
+        if cert.revoked:
+            raise SysExit("Certificate already revoked!")
+        print "Revoking certificate with the ID %d" % cert.cert_id
+        cert.revoked = RevokedCertificate(self.opts['reason'])
+        session.commit()
+        raise SysExit("Done", code=0)
+
+class UnRevokeCerts(BaseOptions):
+    longdesc = """Un-Revoke certificates in store"""
+
+    optParameters = [
+        ["id", "i", None, "certificate id", int],
+    ]
+
+    def opt_id(self, cert_id):
+        self.opts['id'] = int(cert_id)
+
+    def executeCommand(self):
+        if not self.opts['id']:
+            raise SysExit("You must specify which certificate you wish to "
+                          "un-revoke")
+
+        session = db.session()
+        cert = session.query(Certificate).get(self.opts['id'])
+        if not cert:
+            raise SysExit("Certificate with the ID %d not found",
+                          self.opts['id'])
+        if not cert.revoked:
+            raise SysExit("Certificate is not revoked!")
+        print "Un-Revoking certificate with the ID %d" % cert.cert_id
+        session.delete(cert.revoked)
+        session.commit()
+
+        raise SysExit("Done", code=0)
+
+
+
 class CertsCreatorOptions(BaseOptions):
     """Certificates Manager"""
 
@@ -360,7 +421,9 @@ class CertsCreatorOptions(BaseOptions):
         ["list", None, ListCerts, "List certificates in store"],
         ["export", None, ExportCerts, "Export certificates in store"],
 #        ["sign", None, SignCert, "Sign an already created certificate"]
-        ["delete", None, DeleteCerts, "Delete certificates in store"]
+        ["delete", None, DeleteCerts, "Delete certificates in store"],
+        ["revoke", None, RevokeCerts, "Revoke certificates in store"],
+        ["unrevoke", None, UnRevokeCerts, "Un-Revoke certificates in store"]
     ]
 
     def executeCommand(self):

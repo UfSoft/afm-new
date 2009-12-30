@@ -72,7 +72,6 @@ def create_engine():
         value = os.environ.get('SSHG_DATABASE_' + key.upper())
         if value is not None:
             options[key] = int(value)
-    print options
     try:
         return sqlalchemy.create_engine(info, **options)
     except TypeError:
@@ -142,8 +141,6 @@ class Certificate(DeclarativeBase):
     private_key = db.Column(db.Text)
     issued_on   = db.Column(db.DateTime, default=datetime.utcnow)
     root_ca     = db.Column(db.Boolean, default=False)
-    revoked     = db.Column(db.Boolean, default=False)
-    revoked_on  = db.Column(db.DateTime, default=datetime.utcnow)
     issuer_id   = db.Column(db.ForeignKey('certificates.cert_id'))
 
     # Relations
@@ -151,6 +148,8 @@ class Certificate(DeclarativeBase):
                               remote_side="Certificate.issuer_id",
                               backref=db.backref("issuer", uselist=False,
                                                  remote_side='Certificate.cert_id'))
+    revoked     = db.relation("RevokedCertificate", backref="cert",
+                              uselist=False, cascade="all,delete-orphan")
 
 
     def __init__(self, serial, certificate, private_key,
@@ -182,9 +181,21 @@ class Certificate(DeclarativeBase):
         return self.cert.get_subject()
 
     @property
-    def issuer(self):
+    def cert_issuer(self):
         return self.cert.get_issuer()
 
+
+class RevokedCertificate(DeclarativeBase):
+    """Revoked certificates Table"""
+
+    __tablename__ = 'revocations'
+
+    cert_id = db.Column(db.ForeignKey('certificates.cert_id'), primary_key=True)
+    when    = db.Column(db.DateTime, default=datetime.utcnow)
+    reason  = db.Column(db.Text)
+
+    def __init__(self, reason):
+        self.reason = reason
 
 class Failure(DeclarativeBase):
     """Audio Failures log table"""
